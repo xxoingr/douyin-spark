@@ -15,13 +15,33 @@
 - **防重复与补发**：同一天同一好友只发一次，失败的好友会单独补发
 - **运行日志**：每次运行的结果、失败原因和截图都能在页面上查看
 
+## 使用方法
+
+需要 [Node.js](https://nodejs.org/) 24 或更高版本。
+
+```bash
+npm install
+npx playwright install chromium
+npm run build
+npm start
+```
+
+然后在浏览器打开 <http://localhost:6688>：
+
+1. **账号**页：点“扫码登录”，在弹出的浏览器窗口里用手机抖音扫码
+2. **好友**页：点“刷新好友列表”，把要续火花的好友打开开关
+3. **消息**页：添加几条消息，发送时会随机挑一条
+4. 点右上角 **立即发送**，在“运行记录”页查看每个好友的结果
+
+> 页面只在本机访问（只监听 127.0.0.1），局域网里的其他设备打不开。
+
 ## 技术栈
 
 | 部分 | 技术 |
 | --- | --- |
-| 运行环境 | Node.js 22+ |
+| 运行环境 | Node.js 24+ |
 | 浏览器自动化 | [Playwright](https://playwright.dev/) |
-| 后端 | Express + SQLite |
+| 后端 | Express + SQLite（Node 自带的 `node:sqlite`） |
 | 前端 | Vue 3 + Vite + Element Plus |
 
 ## 路线图

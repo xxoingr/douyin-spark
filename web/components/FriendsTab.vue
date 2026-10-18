@@ -1,0 +1,90 @@
+<script setup>
+import { computed, inject, onMounted, ref, watch } from 'vue';
+import { ElMessage } from 'element-plus';
+import { api } from '../api.js';
+
+const busy = inject('busy');
+const finishedCount = inject('finishedCount');
+const startTask = inject('startTask');
+
+const friends = ref([]);
+const onlyFlame = ref(true);
+
+async function load() {
+  friends.value = await api.friends();
+}
+onMounted(load);
+watch(finishedCount, load);
+
+const shown = computed(() => (onlyFlame.value ? friends.value.filter((f) => f.flame_days != null) : friends.value));
+const enabledCount = computed(() => friends.value.filter((f) => f.enabled).length);
+
+async function toggle(friend, enabled) {
+  try {
+    await api.setFriendEnabled(friend.uid, enabled);
+    friend.enabled = enabled ? 1 : 0;
+  } catch (err) {
+    ElMessage.error(err.message);
+  }
+}
+</script>
+
+<template>
+  <div>
+    <div class="toolbar">
+      <el-button :disabled="busy" @click="startTask(api.refreshFriends)">刷新好友列表</el-button>
+      <el-switch v-model="onlyFlame" active-text="只看有火花的" />
+      <span class="hint">已勾选 {{ enabledCount }} 个好友续火花</span>
+    </div>
+
+    <el-empty v-if="!friends.length" description="还没有好友数据，点“刷新好友列表”从抖音拉取（约半分钟）" />
+    <el-table v-else :data="shown" row-key="uid">
+      <el-table-column label="好友" min-width="220">
+        <template #default="{ row }">
+          <div class="friend">
+            <img v-if="row.avatar" :src="row.avatar" class="avatar" referrerpolicy="no-referrer" alt="" />
+            <span>{{ row.title }}</span>
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column label="火花" min-width="220">
+        <template #default="{ row }">
+          <template v-if="row.flame_days != null">
+            <span class="days">🔥 {{ row.flame_days }} 天</span>
+            <el-tag v-if="row.flame_done_today" type="success" size="small">今天已续</el-tag>
+            <el-tag v-else type="warning" size="small">今天未续</el-tag>
+            <span v-if="row.flame_text !== String(row.flame_days)" class="hint flame-text">{{ row.flame_text }}</span>
+          </template>
+          <span v-else class="hint">无火花</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="续火花" width="90" align="center">
+        <template #default="{ row }">
+          <el-switch :model-value="Boolean(row.enabled)" @change="(value) => toggle(row, value)" />
+        </template>
+      </el-table-column>
+    </el-table>
+  </div>
+</template>
+
+<style scoped>
+.friend {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.days {
+  margin-right: 8px;
+  font-weight: 600;
+  color: #e6501f;
+}
+.flame-text {
+  margin-left: 8px;
+}
+</style>
