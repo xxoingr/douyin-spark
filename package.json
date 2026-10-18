@@ -15,7 +15,8 @@
   },
   "scripts": {
     "login": "node scripts/login.js",
-    "friends": "node scripts/friends.js"
+    "friends": "node scripts/friends.js",
+    "send": "node scripts/send.js"
   },
   "dependencies": {
     "playwright": "1.62.0"
