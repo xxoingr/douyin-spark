@@ -11,15 +11,25 @@
     "url": "https://github.com/xxoingr/douyin-spark.git"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
   },
   "scripts": {
+    "start": "node server/index.js",
+    "build": "vite build",
+    "dev:web": "vite",
     "test": "node --test",
     "login": "node scripts/login.js",
     "friends": "node scripts/friends.js",
     "send": "node scripts/send.js"
   },
   "dependencies": {
-    "playwright": "1.62.0"
+    "element-plus": "^2.14.7",
+    "express": "^5.3.0",
+    "playwright": "1.62.0",
+    "vue": "^3.5.44"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.10",
+    "vite": "^8.3.4"
   }
 }
