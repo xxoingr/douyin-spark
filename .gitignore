@@ -1,0 +1,7 @@
+node_modules/
+dist/
+
+# 登录状态、数据库、截图都在 data/ 里，包含账号凭证和聊天信息，绝不能提交
+data/
+*.log
+.env

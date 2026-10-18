@@ -1,0 +1,23 @@
+{
+  "name": "douyin-spark",
+  "version": "0.1.0",
+  "description": "本地运行的抖音续火花工具：网页界面管理好友和消息，支持多账号",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "author": "xxoingr",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xxoingr/douyin-spark.git"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "login": "node scripts/login.js",
+    "friends": "node scripts/friends.js"
+  },
+  "dependencies": {
+    "playwright": "1.62.0"
+  }
+}
