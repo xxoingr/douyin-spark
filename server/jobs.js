@@ -33,6 +33,7 @@ export function refreshFriends() {
 }
 
 // 给所有勾选的好友各发一条随机消息。今天已经发过、或者今天火花已经续上的会跳过。
+// 返回发送失败的好友数。
 export async function runOnce() {
   const messages = db.prepare('SELECT content FROM messages').all().map((m) => m.content);
   if (!messages.length) throw new Error('还没有消息模板，请先在“消息”页添加');
@@ -40,6 +41,7 @@ export async function runOnce() {
   if (!enabled.length) throw new Error('还没有勾选要续火花的好友');
 
   const runId = startRun();
+  let failed = 0;
   try {
     await withFriends(async (page, friends) => {
       let sentBefore = false;
@@ -47,6 +49,7 @@ export async function runOnce() {
         const friend = friends.find((f) => f.uid === target.uid);
         if (!friend) {
           recordSend(runId, target, 'failed', null, '会话列表里找不到这个好友');
+          failed++;
           continue;
         }
         if (sentToday(friend.uid)) {
@@ -66,11 +69,13 @@ export async function runOnce() {
           recordSend(runId, friend, 'success', content);
         } catch (err) {
           recordSend(runId, friend, 'failed', content, err.message);
+          failed++;
         }
         sentBefore = true;
       }
     });
     finishRun(runId);
+    return failed;
   } catch (err) {
     finishRun(runId, err.message);
     throw err;

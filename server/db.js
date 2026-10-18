@@ -38,7 +38,21 @@ db.exec(`
     detail TEXT,
     created_at TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL  -- JSON
+  );
 `);
+
+export function getSetting(key) {
+  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
+  return row ? JSON.parse(row.value) : null;
+}
+
+export function setSetting(key, value) {
+  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+    .run(key, JSON.stringify(value));
+}
 
 const now = () => new Date().toISOString();
 // 本地日期，例如 2026-10-19（sv-SE 格式正好是 YYYY-MM-DD）
