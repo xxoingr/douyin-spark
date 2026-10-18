@@ -44,6 +44,10 @@ const now = () => new Date().toISOString();
 // 本地日期，例如 2026-10-19（sv-SE 格式正好是 YYYY-MM-DD）
 export const today = () => new Date().toLocaleDateString('sv-SE');
 
+// 服务器在发送途中被关掉时，那次运行会一直停在 running，启动时把它标记为出错
+db.prepare("UPDATE runs SET status = 'failed', error = ?, finished_at = ? WHERE status = 'running'")
+  .run('服务器中途停止，这次没有发完，再点一次“立即发送”会补发剩下的好友', now());
+
 // 拉取到的好友写入数据库；已有的好友只更新信息，保留用户勾选的状态
 export function saveFriends(friends) {
   const upsert = db.prepare(`
