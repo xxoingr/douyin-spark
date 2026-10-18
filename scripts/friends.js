@@ -3,7 +3,6 @@ import { openBrowser, openChatPage, saveCookies } from '../server/douyin/browser
 import { fetchFriends } from '../server/douyin/friends.js';
 
 const STATE_PATH = 'data/state.json';
-const STATE_TEXT = { 1: '正常', 2: '将熄灭', 3: '重燃中' };
 
 const { browser, context, page } = await openBrowser(STATE_PATH);
 try {
@@ -16,7 +15,9 @@ try {
   friends
     .sort((a, b) => (b.flame?.days ?? -1) - (a.flame?.days ?? -1))
     .forEach((f) => {
-      const flame = f.flame ? `🔥 ${String(f.flame.days).padStart(4)} 天 ${STATE_TEXT[f.flame.state] ?? f.flame.state}  ${f.flame.text}` : '   无火花';
+      const flame = f.flame
+        ? `🔥 ${String(f.flame.days).padStart(4)} 天 ${f.flame.doneToday ? '今天已续' : '今天未续'}  ${f.flame.text}`
+        : '   无火花';
       console.log(`${flame.padEnd(28)} ${f.title}  (uid ${f.uid})`);
     });
 } finally {

@@ -13,17 +13,6 @@ function readRenderedRows([itemSelector, titleSelector]) {
     while (fiber && !fiber.memoizedProps?.conversation) fiber = fiber.return;
     const conversation = fiber?.memoizedProps.conversation;
     if (!conversation) return null;
-
-    let flame = null;
-    try {
-      const data = JSON.parse(conversation.ext?.['a:consecutive_chat_data'] || 'null');
-      const current = data?.flame_infos?.[0];
-      if (current) {
-        flame = { days: current.days, state: current.state, text: current.text, expireTime: data.expire_time };
-      }
-    } catch {
-      // 没有火花或格式变了，就当没有火花
-    }
     return {
       // uid 超过 JS 安全整数范围，只能从会话 id 字符串里取，不能用数字字段
       conversationId: String(conversation.id),
@@ -31,9 +20,28 @@ function readRenderedRows([itemSelector, titleSelector]) {
       secUid: conversation.toParticipantSecUserId || '',
       title: row.querySelector(titleSelector)?.textContent.trim() || '',
       avatar: row.querySelector('.semi-avatar img')?.src || '',
-      flame,
+      flameData: conversation.ext?.['a:consecutive_chat_data'],
     };
   }).filter(Boolean);
+}
+
+// 抖音给的火花数据是一张按天排好的时间表：每一段 [start, end) 是那一天要显示的状态，
+// 例如今天显示“386”（灰色，今天还没续），明天起显示“6 天后消失”。取当前时间所在的那一段。
+// level：normal 今天已续 / gray 今天还没续 / recover_normal 重燃中且今天已聊 / to_recover 已断开待重燃
+export function currentFlame(raw, now = Date.now()) {
+  let entries;
+  try {
+    entries = JSON.parse(raw).flame_infos;
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(entries) || !entries.length) return null;
+  const seconds = now / 1000;
+  // 本机时钟可能比抖音服务器略慢，还没到第一段时按第一段算；超出最后一段说明火花已消失
+  const entry = seconds < entries[0].start ? entries[0] : entries.find((e) => e.start <= seconds && seconds < e.end);
+  if (!entry) return null;
+  const level = String(entry.level).split('|')[0];
+  return { days: entry.days, text: entry.text, level, doneToday: level === 'normal' || level === 'recover_normal' };
 }
 
 // 在页面里运行：把会话列表往下滚一屏，返回是否真的滚动了。
@@ -74,6 +82,6 @@ export async function fetchFriends(page) {
   const { selfUid, peerOf } = splitUids(privateChats);
   return {
     selfUid,
-    friends: privateChats.map(({ type, ...c }) => ({ uid: peerOf(c.conversationId), ...c })),
+    friends: privateChats.map(({ type, flameData, ...c }) => ({ uid: peerOf(c.conversationId), ...c, flame: currentFlame(flameData) })),
   };
 }
