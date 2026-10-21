@@ -13,13 +13,18 @@ async function request(method, path, body) {
 
 export const api = {
   status: () => request('GET', '/status'),
-  login: () => request('POST', '/login'),
-  refreshFriends: () => request('POST', '/friends/refresh'),
-  friends: () => request('GET', '/friends'),
-  setFriendEnabled: (uid, enabled) => request('PATCH', `/friends/${uid}`, { enabled }),
-  messages: () => request('GET', '/messages'),
-  addMessage: (content) => request('POST', '/messages', { content }),
-  deleteMessage: (id) => request('DELETE', `/messages/${id}`),
+  accounts: () => request('GET', '/accounts'),
+  login: () => request('POST', '/accounts/login'),
+  deleteAccount: (accountId) => request('DELETE', `/accounts/${accountId}`),
+  refreshFriends: (accountId) => request('POST', `/accounts/${accountId}/friends/refresh`),
+  friends: (accountId) => request('GET', `/accounts/${accountId}/friends`),
+  setFriendEnabled: (accountId, uid, enabled) => request('PATCH', `/accounts/${accountId}/friends/${uid}`, { enabled }),
+  messages: (accountId) => request('GET', `/accounts/${accountId}/messages`),
+  addMessage: (accountId, content) => request('POST', `/accounts/${accountId}/messages`, { content }),
+  deleteMessage: (messageId) => request('DELETE', `/messages/${messageId}`),
   run: () => request('POST', '/runs'),
-  runs: () => request('GET', '/runs'),
+  runs: (accountId) => request('GET', `/accounts/${accountId}/runs`),
 };
+
+// 账号显示名：没读到昵称时用编号
+export const accountName = (account) => account.nickname || `账号 ${account.id}`;

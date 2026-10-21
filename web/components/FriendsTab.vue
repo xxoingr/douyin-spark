@@ -6,15 +6,16 @@ import { api } from '../api.js';
 const busy = inject('busy');
 const finishedCount = inject('finishedCount');
 const startTask = inject('startTask');
+const accountId = inject('accountId');
 
 const friends = ref([]);
 const onlyFlame = ref(true);
 
 async function load() {
-  friends.value = await api.friends();
+  friends.value = accountId.value ? await api.friends(accountId.value) : [];
 }
 onMounted(load);
-watch(finishedCount, load);
+watch([finishedCount, accountId], load);
 
 const shown = computed(() => (onlyFlame.value ? friends.value.filter((f) => f.flame_days != null) : friends.value));
 const enabledCount = computed(() => friends.value.filter((f) => f.enabled).length);
@@ -25,7 +26,7 @@ const unsentCount = computed(() => friends.value.filter((f) => f.enabled && !sen
 
 async function toggle(friend, enabled) {
   try {
-    await api.setFriendEnabled(friend.uid, enabled);
+    await api.setFriendEnabled(accountId.value, friend.uid, enabled);
     friend.enabled = enabled ? 1 : 0;
   } catch (err) {
     ElMessage.error(err.message);
@@ -35,14 +36,15 @@ async function toggle(friend, enabled) {
 
 <template>
   <div>
-    <div class="toolbar">
-      <el-button :disabled="busy" @click="startTask(api.refreshFriends)">刷新好友列表</el-button>
+    <el-empty v-if="!accountId" description="还没有账号，先到“账号”页扫码添加" />
+    <div v-else class="toolbar">
+      <el-button :disabled="busy" @click="startTask(() => api.refreshFriends(accountId))">刷新好友列表</el-button>
       <el-switch v-model="onlyFlame" active-text="只看有火花的" />
       <span class="hint">已勾选 {{ enabledCount }} 个好友续火花，今天还有 {{ unsentCount }} 个没发</span>
     </div>
 
-    <el-empty v-if="!friends.length" description="还没有好友数据，点“刷新好友列表”从抖音拉取（约半分钟）" />
-    <el-table v-else :data="shown" row-key="uid">
+    <el-empty v-if="accountId && !friends.length" description="还没有好友数据，点“刷新好友列表”从抖音拉取（约半分钟）" />
+    <el-table v-else-if="accountId" :data="shown" row-key="uid">
       <el-table-column label="好友" min-width="220">
         <template #default="{ row }">
           <div class="friend">

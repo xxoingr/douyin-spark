@@ -4,13 +4,14 @@ import { api } from '../api.js';
 
 const status = inject('status');
 const finishedCount = inject('finishedCount');
+const accountId = inject('accountId');
 const runs = ref([]);
 
 async function load() {
-  runs.value = await api.runs();
+  runs.value = accountId.value ? await api.runs(accountId.value) : [];
 }
 onMounted(load);
-watch(finishedCount, load);
+watch([finishedCount, accountId], load);
 
 // 发送进行中时每 3 秒刷新一次，能看到一个个好友的结果陆续出来
 let timer;

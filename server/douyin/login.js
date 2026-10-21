@@ -8,6 +8,8 @@ const LOGIN_TIMEOUT_MS = 5 * 60_000;
 // 未登录时没有 sessionid Cookie，扫码成功后才会出现，以此判断登录完成。
 export async function loginByQrCode(statePath) {
   const browser = await chromium.launch({ headless: false });
+  let windowClosed = false;
+  browser.on('disconnected', () => (windowClosed = true));
   try {
     const context = await browser.newContext({ viewport: { width: 1280, height: 860 }, locale: 'zh-CN' });
     const page = await context.newPage();
@@ -27,6 +29,10 @@ export async function loginByQrCode(statePath) {
       await page.waitForTimeout(2_000);
     }
     throw new Error('5 分钟内没有完成扫码登录');
+  } catch (err) {
+    // 用户提前关掉了扫码窗口，Playwright 的原始报错看不懂，换成直白的说法
+    if (windowClosed || /closed/i.test(err.message)) throw new Error('扫码窗口被关掉了，这次没有登录');
+    throw err;
   } finally {
     await browser.close();
   }

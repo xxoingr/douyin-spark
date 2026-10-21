@@ -1,12 +1,16 @@
 import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 
-fs.mkdirSync('data', { recursive: true });
+fs.mkdirSync('data/accounts', { recursive: true });
 export const db = new DatabaseSync('data/app.db');
 
-db.exec(`
+// 单账号版本的登录文件；升级后它属于账号 1，新加的账号放在 data/accounts/<id>.json
+const LEGACY_STATE_PATH = 'data/state.json';
+
+const FRIENDS_TABLE = `
   CREATE TABLE IF NOT EXISTS friends (
-    uid TEXT PRIMARY KEY,
+    account_id INTEGER NOT NULL,
+    uid TEXT NOT NULL,
     conversation_id TEXT NOT NULL,
     title TEXT NOT NULL,
     avatar TEXT,
@@ -14,14 +18,28 @@ db.exec(`
     flame_text TEXT,
     my_sent_at INTEGER,  -- 自己最后一次给 TA 发消息的时间（毫秒），含手机上手动发的
     enabled INTEGER NOT NULL DEFAULT 0,  -- 是否续火花，由用户在页面上勾选
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (account_id, uid)  -- 同一个好友可能同时是几个账号的好友
+  )`;
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS accounts (
+    id INTEGER PRIMARY KEY,
+    uid TEXT UNIQUE,  -- 抖音 uid，扫码时用来判断是不是已经添加过的账号
+    nickname TEXT,
+    avatar TEXT,
+    state_path TEXT NOT NULL,  -- 这个账号的登录状态文件
+    created_at TEXT NOT NULL
   );
+  ${FRIENDS_TABLE};
   CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY,
+    account_id INTEGER NOT NULL,
     content TEXT NOT NULL
   );
   CREATE TABLE IF NOT EXISTS runs (
     id INTEGER PRIMARY KEY,
+    account_id INTEGER NOT NULL,
     started_at TEXT NOT NULL,
     finished_at TEXT,
     status TEXT NOT NULL,  -- running / done / failed
@@ -40,12 +58,30 @@ db.exec(`
   );
 `);
 
-// 旧版本建的好友表没有 my_sent_at 这一列，补上
-if (!db.prepare('PRAGMA table_info(friends)').all().some((column) => column.name === 'my_sent_at')) {
-  db.exec('ALTER TABLE friends ADD COLUMN my_sent_at INTEGER');
+const now = () => new Date().toISOString();
+const columns = (table) => db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+
+// 单账号版本的数据库没有 account_id：把原来的好友、消息、运行记录都归到账号 1。
+// 好友表的主键要改成 (account_id, uid)，SQLite 改不了主键，只能重建表。
+if (!columns('friends').includes('account_id')) {
+  const keep = ['uid', 'conversation_id', 'title', 'avatar', 'flame_days', 'flame_text', 'my_sent_at', 'enabled', 'updated_at']
+    .filter((column) => columns('friends').includes(column))
+    .join(', ');
+  db.exec(`
+    BEGIN;
+    ALTER TABLE friends RENAME TO friends_single;
+    ${FRIENDS_TABLE};
+    INSERT INTO friends (account_id, ${keep}) SELECT 1, ${keep} FROM friends_single;
+    DROP TABLE friends_single;
+    ALTER TABLE messages ADD COLUMN account_id INTEGER NOT NULL DEFAULT 1;
+    ALTER TABLE runs ADD COLUMN account_id INTEGER NOT NULL DEFAULT 1;
+    COMMIT;
+  `);
+  if (fs.existsSync(LEGACY_STATE_PATH)) {
+    db.prepare('INSERT INTO accounts (id, state_path, created_at) VALUES (1, ?, ?)').run(LEGACY_STATE_PATH, now());
+  }
 }
 
-const now = () => new Date().toISOString();
 // 本地日期，例如 2026-10-19（sv-SE 格式正好是 YYYY-MM-DD）
 export const today = () => new Date().toLocaleDateString('sv-SE');
 const isToday = (ms) => ms != null && new Date(ms).toLocaleDateString('sv-SE') === today();
@@ -54,24 +90,64 @@ const isToday = (ms) => ms != null && new Date(ms).toLocaleDateString('sv-SE') =
 db.prepare("UPDATE runs SET status = 'failed', error = ?, finished_at = ? WHERE status = 'running'")
   .run('服务器中途停止，这次没有发完，再点一次“立即发送”会补发剩下的好友', now());
 
+export function listAccounts() {
+  return db.prepare('SELECT * FROM accounts ORDER BY id').all();
+}
+
+export function getAccount(id) {
+  const account = db.prepare('SELECT * FROM accounts WHERE id = ?').get(id);
+  if (!account) throw new Error('账号不存在');
+  return account;
+}
+
+export function updateAccountProfile(id, { uid, nickname, avatar }) {
+  db.prepare('UPDATE accounts SET uid = ?, nickname = ?, avatar = ? WHERE id = ?').run(uid, nickname, avatar, id);
+}
+
+// 新建账号，返回它的登录状态文件路径
+export function addAccount({ uid, nickname, avatar }) {
+  const id = Number(db.prepare('INSERT INTO accounts (uid, nickname, avatar, state_path, created_at) VALUES (?, ?, ?, ?, ?)')
+    .run(uid, nickname, avatar, '', now()).lastInsertRowid);
+  const statePath = `data/accounts/${id}.json`;
+  db.prepare('UPDATE accounts SET state_path = ? WHERE id = ?').run(statePath, id);
+  return statePath;
+}
+
+// 删除账号和它的所有数据，返回登录状态文件路径（由调用方删除文件）
+export function deleteAccount(id) {
+  const { state_path: statePath } = getAccount(id);
+  db.exec('BEGIN');
+  try {
+    db.prepare('DELETE FROM sends WHERE run_id IN (SELECT id FROM runs WHERE account_id = ?)').run(id);
+    for (const table of ['runs', 'messages', 'friends']) db.prepare(`DELETE FROM ${table} WHERE account_id = ?`).run(id);
+    db.prepare('DELETE FROM accounts WHERE id = ?').run(id);
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+  return statePath;
+}
+
 // 拉取到的好友写入数据库；已有的好友只更新信息，保留用户勾选的状态
-export function saveFriends(friends) {
+export function saveFriends(accountId, friends) {
   const upsert = db.prepare(`
-    INSERT INTO friends (uid, conversation_id, title, avatar, flame_days, flame_text, my_sent_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(uid) DO UPDATE SET
+    INSERT INTO friends (account_id, uid, conversation_id, title, avatar, flame_days, flame_text, my_sent_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(account_id, uid) DO UPDATE SET
       conversation_id = excluded.conversation_id, title = excluded.title, avatar = excluded.avatar,
       flame_days = excluded.flame_days, flame_text = excluded.flame_text,
       my_sent_at = excluded.my_sent_at, updated_at = excluded.updated_at
   `);
   for (const f of friends) {
-    upsert.run(f.uid, f.conversationId, f.title, f.avatar, f.flame?.days ?? null, f.flame?.text ?? null,
+    upsert.run(accountId, f.uid, f.conversationId, f.title, f.avatar, f.flame?.days ?? null, f.flame?.text ?? null,
       f.mySentAt, now());
   }
 }
 
-export function startRun() {
-  return Number(db.prepare('INSERT INTO runs (started_at, status) VALUES (?, ?)').run(now(), 'running').lastInsertRowid);
+export function startRun(accountId) {
+  return Number(db.prepare('INSERT INTO runs (account_id, started_at, status) VALUES (?, ?, ?)')
+    .run(accountId, now(), 'running').lastInsertRowid);
 }
 
 export function finishRun(runId, error) {
@@ -84,11 +160,16 @@ export function recordSend(runId, friend, status, content, detail) {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(runId, friend.uid, friend.title, today(), content ?? null, status, detail ?? null, now());
   // 页面上马上显示“今天已发”，不用等下次刷新好友
-  if (status === 'success') db.prepare('UPDATE friends SET my_sent_at = ? WHERE uid = ?').run(Date.now(), friend.uid);
+  if (status === 'success') {
+    db.prepare('UPDATE friends SET my_sent_at = ? WHERE uid = ? AND account_id = (SELECT account_id FROM runs WHERE id = ?)')
+      .run(Date.now(), friend.uid, runId);
+  }
 }
 
-// 今天有没有给这个好友发过：抖音里自己发的最后一条是今天的（含手机上手动发的），或者本程序今天发成功过
-export function sentToday(friend) {
+// 这个账号今天有没有给这个好友发过：抖音里自己发的最后一条是今天的（含手机上手动发的），或者本程序今天发成功过
+export function sentToday(accountId, friend) {
   return isToday(friend.mySentAt)
-    || Boolean(db.prepare("SELECT 1 FROM sends WHERE friend_uid = ? AND day = ? AND status = 'success'").get(friend.uid, today()));
+    || Boolean(db.prepare(`SELECT 1 FROM sends JOIN runs ON runs.id = sends.run_id
+      WHERE runs.account_id = ? AND sends.friend_uid = ? AND sends.day = ? AND sends.status = 'success'`)
+      .get(accountId, friend.uid, today()));
 }

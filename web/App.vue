@@ -1,15 +1,34 @@
 <script setup>
-import { computed, onMounted, onUnmounted, provide, ref } from 'vue';
+import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
-import { api } from './api.js';
+import { accountName, api } from './api.js';
 import FriendsTab from './components/FriendsTab.vue';
 import MessagesTab from './components/MessagesTab.vue';
 import RunsTab from './components/RunsTab.vue';
 import AccountTab from './components/AccountTab.vue';
 
-const status = ref({ account: {}, current: null, last: null });
+const status = ref({ current: null, last: null });
 const finishedCount = ref(0); // 每结束一个后台任务加一，各页面据此重新加载数据
 const tab = ref('friends');
+
+// 所有账号，以及当前选中的账号（记在浏览器里，下次打开还是它）
+const accounts = ref([]);
+const accountId = ref(Number(localStorage.getItem('accountId')) || null);
+const account = computed(() => accounts.value.find((a) => a.id === accountId.value) ?? null);
+watch(accountId, (id) => localStorage.setItem('accountId', id ?? ''));
+
+async function loadAccounts() {
+  const previousIds = accounts.value.map((a) => a.id);
+  accounts.value = await api.accounts();
+  const ids = accounts.value.map((a) => a.id);
+  const added = ids.filter((id) => !previousIds.includes(id));
+  // 刚扫码添加的账号自动选中；选中的账号被删了就选第一个
+  if (previousIds.length && added.length) accountId.value = added.at(-1);
+  else if (!ids.includes(accountId.value)) accountId.value = ids[0] ?? null;
+  if (!ids.length) tab.value = 'account';
+}
+onMounted(() => loadAccounts().catch(() => {}));
+watch(finishedCount, () => loadAccounts().catch(() => {}));
 
 let polledOnce = false;
 async function poll() {
@@ -55,6 +74,9 @@ provide('status', status);
 provide('busy', busy);
 provide('finishedCount', finishedCount);
 provide('startTask', startTask);
+provide('accounts', accounts);
+provide('accountId', accountId);
+provide('loadAccounts', loadAccounts);
 </script>
 
 <template>
@@ -63,9 +85,19 @@ provide('startTask', startTask);
       <h1>🔥 douyin-spark</h1>
       <div class="header-right">
         <el-tag v-if="busy" type="warning" effect="light">⏳ 正在{{ status.current.name }}…</el-tag>
-        <el-tag v-if="status.account.loggedIn" type="success" effect="plain">已登录</el-tag>
-        <el-tag v-else type="danger" effect="plain">未登录</el-tag>
-        <el-button type="danger" :disabled="busy || !status.account.loggedIn" @click="sendNow">立即发送</el-button>
+        <el-select v-if="accounts.length" v-model="accountId" style="width: 190px">
+          <template #prefix>
+            <img v-if="account?.avatar" :src="account.avatar" class="account-avatar" referrerpolicy="no-referrer" alt="" />
+          </template>
+          <el-option v-for="a in accounts" :key="a.id" :value="a.id" :label="accountName(a) + (a.loggedIn ? '' : '（登录失效）')">
+            <div class="account-option">
+              <img v-if="a.avatar" :src="a.avatar" class="account-avatar" referrerpolicy="no-referrer" alt="" />
+              <span>{{ accountName(a) }}</span>
+              <el-tag v-if="!a.loggedIn" type="danger" size="small" disable-transitions>登录失效</el-tag>
+            </div>
+          </el-option>
+        </el-select>
+        <el-button type="danger" :disabled="busy || !accounts.length" @click="sendNow">立即发送（全部账号）</el-button>
       </div>
     </header>
 
@@ -103,8 +135,20 @@ body {
 }
 .header-right {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: center;
+}
+.account-option {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.account-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  object-fit: cover;
 }
 .toolbar {
   display: flex;
