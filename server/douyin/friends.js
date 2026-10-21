@@ -27,7 +27,10 @@ function readRenderedRows([itemSelector, titleSelector]) {
 
 // 抖音给的火花数据是一张按天排好的时间表：每一段 [start, end) 是那一天要显示的状态，
 // 例如今天显示“386”（灰色，今天还没续），明天起显示“6 天后消失”。取当前时间所在的那一段。
-// level：normal 今天已续 / gray 今天还没续 / recover_normal 重燃中且今天已聊 / to_recover 已断开待重燃
+// level 是火花颜色：gray（灰色，今天还没续）、to_recover（已断开，待重燃）表示今天还要发；
+// normal、recover_normal（重燃中且今天已聊）、blue 等其他颜色都是点亮的火花——抖音会按互动方式换颜色。
+const NOT_DONE_LEVELS = new Set(['gray', 'to_recover']);
+
 export function currentFlame(raw, now = Date.now()) {
   let entries;
   try {
@@ -41,7 +44,7 @@ export function currentFlame(raw, now = Date.now()) {
   const entry = seconds < entries[0].start ? entries[0] : entries.find((e) => e.start <= seconds && seconds < e.end);
   if (!entry) return null;
   const level = String(entry.level).split('|')[0];
-  return { days: entry.days, text: entry.text, level, doneToday: level === 'normal' || level === 'recover_normal' };
+  return { days: entry.days, text: entry.text, level, doneToday: !NOT_DONE_LEVELS.has(level) };
 }
 
 // 在页面里运行：把会话列表往下滚一屏，返回是否真的滚动了。
