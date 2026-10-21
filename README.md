@@ -23,10 +23,12 @@
 npm install
 npx playwright install chromium
 npm run build
-npm start
+npm run shortcut
 ```
 
-然后在浏览器打开 <http://localhost:6688>：
+之后双击桌面上的 **续火花** 图标即可：服务器在后台启动（不弹窗口），并自动打开 <http://localhost:6688>。关掉网页 10 分钟后服务器自动退出，不用时不占内存。也可以用 `npm start` 手动启动（不会自动退出）。
+
+第一次使用：
 
 1. **账号**页：点“扫码登录”，在弹出的浏览器窗口里用手机抖音扫码
 2. **好友**页：点“刷新好友列表”，把要续火花的好友打开开关

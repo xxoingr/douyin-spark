@@ -5,8 +5,22 @@ import { login, refreshFriends, runOnce, STATE_PATH } from './jobs.js';
 import { BusyError, startTask, taskStatus } from './tasks.js';
 
 const PORT = 6688;
+const IDLE_EXIT_MS = 10 * 60_000;
 const app = express();
 app.use(express.json());
+
+// 从桌面快捷方式启动时带 --exit-when-idle：页面关掉 10 分钟后自动退出，平时不占内存。
+// 页面开着时会不停请求 /api/status（后台标签页也至少每分钟一次），所以开着就不会退出。
+if (process.argv.includes('--exit-when-idle')) {
+  let lastRequestAt = Date.now();
+  app.use((req, res, next) => {
+    lastRequestAt = Date.now();
+    next();
+  });
+  setInterval(() => {
+    if (Date.now() - lastRequestAt > IDLE_EXIT_MS && !taskStatus().current) process.exit(0);
+  }, 60_000);
+}
 
 // 登录状态：看保存的 Cookie 里 sessionid 有没有过期
 function accountStatus() {

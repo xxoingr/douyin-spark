@@ -15,6 +15,7 @@
   },
   "scripts": {
     "start": "node server/index.js",
+    "shortcut": "node scripts/shortcut.js",
     "build": "vite build",
     "dev:web": "vite",
     "test": "node --test",
