@@ -15,23 +15,12 @@ const raw = JSON.stringify({
 });
 const at = (seconds) => seconds * 1000;
 
-test('取当前时间所在的那一段：今天还没续', () => {
-  assert.deepEqual(currentFlame(raw, at(T0 + 3_600)), { days: 386, text: '386', level: 'gray', doneToday: false });
-});
-
-test('今天已续', () => {
-  assert.equal(currentFlame(raw, at(T0 - 60)).doneToday, true);
-});
-
-test('蓝色等其他颜色的火花也算今天已续', () => {
-  const blue = JSON.stringify({
-    flame_infos: [{ start: T0, end: T0 + DAY, state: 1, level: 'blue|normal', days: 389, text: '389' }],
-  });
-  assert.equal(currentFlame(blue, at(T0 + 60)).doneToday, true);
+test('取当前时间所在的那一段', () => {
+  assert.deepEqual(currentFlame(raw, at(T0 + 3_600)), { days: 386, text: '386' });
 });
 
 test('已断开时显示倒计时文字', () => {
-  assert.deepEqual(currentFlame(raw, at(T0 + DAY + 60)), { days: 386, text: '6 天后消失', level: 'to_recover', doneToday: false });
+  assert.deepEqual(currentFlame(raw, at(T0 + DAY + 60)), { days: 386, text: '6 天后消失' });
 });
 
 test('超出时间表说明火花已经消失', () => {

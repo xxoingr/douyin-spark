@@ -5,7 +5,7 @@ const MAX_SCROLL_ROUNDS = 200;
 
 // 在页面里运行：读出当前渲染的每一行会话。
 // 会话对象挂在行 DOM 的 React 属性上（memoizedProps.conversation），
-// 火花数据在它的 ext['a:consecutive_chat_data'] 里。
+// 火花数据在它的 ext['a:consecutive_chat_data'] 里，myLastMessage 是自己发的最后一条（含手机上手动发的）。
 function readRenderedRows([itemSelector, titleSelector]) {
   return [...document.querySelectorAll(itemSelector)].map((row) => {
     const fiberKey = Object.keys(row).find((key) => key.startsWith('__reactFiber$'));
@@ -21,16 +21,13 @@ function readRenderedRows([itemSelector, titleSelector]) {
       title: row.querySelector(titleSelector)?.textContent.trim() || '',
       avatar: row.querySelector('.semi-avatar img')?.src || '',
       flameData: conversation.ext?.['a:consecutive_chat_data'],
+      mySentAt: conversation.myLastMessage ? new Date(conversation.myLastMessage.createdAt).getTime() : null,
     };
   }).filter(Boolean);
 }
 
-// 抖音给的火花数据是一张按天排好的时间表：每一段 [start, end) 是那一天要显示的状态，
-// 例如今天显示“386”（灰色，今天还没续），明天起显示“6 天后消失”。取当前时间所在的那一段。
-// level 是火花颜色：gray（灰色，今天还没续）、to_recover（已断开，待重燃）表示今天还要发；
-// normal、recover_normal（重燃中且今天已聊）、blue 等其他颜色都是点亮的火花——抖音会按互动方式换颜色。
-const NOT_DONE_LEVELS = new Set(['gray', 'to_recover']);
-
+// 抖音给的火花数据是一张按天排好的时间表：每一段 [start, end) 是那一天要显示的内容，
+// 例如今天显示“386”，明天起显示“6 天后消失”。取当前时间所在的那一段。
 export function currentFlame(raw, now = Date.now()) {
   let entries;
   try {
@@ -43,8 +40,7 @@ export function currentFlame(raw, now = Date.now()) {
   // 本机时钟可能比抖音服务器略慢，还没到第一段时按第一段算；超出最后一段说明火花已消失
   const entry = seconds < entries[0].start ? entries[0] : entries.find((e) => e.start <= seconds && seconds < e.end);
   if (!entry) return null;
-  const level = String(entry.level).split('|')[0];
-  return { days: entry.days, text: entry.text, level, doneToday: !NOT_DONE_LEVELS.has(level) };
+  return { days: entry.days, text: entry.text };
 }
 
 // 在页面里运行：把会话列表往下滚一屏，返回是否真的滚动了。

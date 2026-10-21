@@ -32,7 +32,7 @@ export function refreshFriends() {
   return withFriends(async () => {});
 }
 
-// 给所有勾选的好友各发一条随机消息。今天已经发过、或者今天火花已经续上的会跳过。
+// 给所有勾选的好友各发一条随机消息。今天已经给 TA 发过的跳过（不管对方回没回、火花亮没亮）。
 export async function runOnce() {
   const messages = db.prepare('SELECT content FROM messages').all().map((m) => m.content);
   if (!messages.length) throw new Error('还没有消息模板，请先在“消息”页添加');
@@ -49,12 +49,8 @@ export async function runOnce() {
           recordSend(runId, target, 'failed', null, '会话列表里找不到这个好友');
           continue;
         }
-        if (sentToday(friend.uid)) {
+        if (sentToday(friend)) {
           recordSend(runId, friend, 'skipped', null, '今天已经发过');
-          continue;
-        }
-        if (friend.flame?.doneToday) {
-          recordSend(runId, friend, 'skipped', null, '今天火花已经续上');
           continue;
         }
 

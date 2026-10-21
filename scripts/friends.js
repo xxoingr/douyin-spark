@@ -15,10 +15,9 @@ try {
   friends
     .sort((a, b) => (b.flame?.days ?? -1) - (a.flame?.days ?? -1))
     .forEach((f) => {
-      const flame = f.flame
-        ? `🔥 ${String(f.flame.days).padStart(4)} 天 ${f.flame.doneToday ? '今天已续' : '今天未续'}  ${f.flame.text}`
-        : '   无火花';
-      console.log(`${flame.padEnd(28)} ${f.title}  (uid ${f.uid})`);
+      const flame = f.flame ? `🔥 ${String(f.flame.days).padStart(4)} 天  ${f.flame.text}` : '   无火花';
+      const sent = f.mySentAt && new Date(f.mySentAt).toDateString() === new Date().toDateString() ? '今天已发' : '今天未发';
+      console.log(`${flame.padEnd(24)} ${sent}  ${f.title}  (uid ${f.uid})`);
     });
 } finally {
   await browser.close();
