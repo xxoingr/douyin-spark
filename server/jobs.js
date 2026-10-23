@@ -5,7 +5,7 @@ import { openChat, sendText } from './douyin/chat.js';
 import { loginByQrCode } from './douyin/login.js';
 import { fetchProfile } from './douyin/profile.js';
 import {
-  addAccount, db, finishRun, getAccount, listAccounts, recordSend, saveFriends, sentToday, startRun, updateAccountProfile,
+  addAccount, db, finishRun, getAccount, listAccounts, recordSend, saveFriends, startRun, updateAccountProfile,
 } from './db.js';
 
 // 扫码时先存到这里，认出是哪个账号后再移到该账号自己的文件
@@ -56,7 +56,7 @@ export function refreshFriends(accountId) {
   return withFriends(getAccount(accountId), async () => {});
 }
 
-// 给这个账号勾选的好友各发一条随机消息。今天已经给 TA 发过的跳过（不管对方回没回、火花亮没亮）。
+// 给这个账号勾选的好友各发一条随机消息。不管今天发没发过，每次都发。
 async function runAccount(account) {
   const messages = db.prepare('SELECT content FROM messages WHERE account_id = ?').all(account.id).map((m) => m.content);
   if (!messages.length) throw new Error('还没有消息模板，请先在“消息”页添加');
@@ -70,10 +70,6 @@ async function runAccount(account) {
         const friend = friends.find((f) => f.uid === target.uid);
         if (!friend) {
           recordSend(runId, target, 'failed', null, '会话列表里找不到这个好友');
-          continue;
-        }
-        if (sentToday(account.id, friend)) {
-          recordSend(runId, friend, 'skipped', null, '今天已经发过');
           continue;
         }
 

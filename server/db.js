@@ -84,11 +84,10 @@ if (!columns('friends').includes('account_id')) {
 
 // 本地日期，例如 2026-10-19（sv-SE 格式正好是 YYYY-MM-DD）
 export const today = () => new Date().toLocaleDateString('sv-SE');
-const isToday = (ms) => ms != null && new Date(ms).toLocaleDateString('sv-SE') === today();
 
 // 服务器在发送途中被关掉时，那次运行会一直停在 running，启动时把它标记为出错
 db.prepare("UPDATE runs SET status = 'failed', error = ?, finished_at = ? WHERE status = 'running'")
-  .run('服务器中途停止，这次没有发完，再点一次“立即发送”会补发剩下的好友', now());
+  .run('服务器中途停止，这次没有发完', now());
 
 export function listAccounts() {
   return db.prepare('SELECT * FROM accounts ORDER BY id').all();
@@ -164,12 +163,4 @@ export function recordSend(runId, friend, status, content, detail) {
     db.prepare('UPDATE friends SET my_sent_at = ? WHERE uid = ? AND account_id = (SELECT account_id FROM runs WHERE id = ?)')
       .run(Date.now(), friend.uid, runId);
   }
-}
-
-// 这个账号今天有没有给这个好友发过：抖音里自己发的最后一条是今天的（含手机上手动发的），或者本程序今天发成功过
-export function sentToday(accountId, friend) {
-  return isToday(friend.mySentAt)
-    || Boolean(db.prepare(`SELECT 1 FROM sends JOIN runs ON runs.id = sends.run_id
-      WHERE runs.account_id = ? AND sends.friend_uid = ? AND sends.day = ? AND sends.status = 'success'`)
-      .get(accountId, friend.uid, today()));
 }
